@@ -230,7 +230,7 @@ Value	Group
 > `-o`输出文件的名称，默认是stdout
 
 示例：
-```shell
+```bash
 nwr plot hh Ks_Cdomain/Ks_Cdomain.tsv -g 2 --bins 40 --xl "" --yl "" --xmm 0,2  -o Ks_plot/Ks_Cdomain.tex |
     tectonic -
 ```
@@ -255,8 +255,8 @@ T
 > `-c`color模块颜色，默认灰色
 
 示例：
-```shell
-nwr plot nrps nrps_test.tsv --legend --color blue -o nrps_test.tex |
+```bash
+nwr plot nrps nrps_test.tsv --legend -c blue -o nrps_test.tex |
     tectonic -
 magick -density 600 nrps_test.pdf nrps_test.png
 ```
