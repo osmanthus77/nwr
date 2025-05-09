@@ -52,19 +52,16 @@ nwr member \
 
 | rank             |  count |
 | ---------------- | -----: |
-| order            |     23 |
-| no rank          |    474 |
-| species          | 72,026 |
-| family           |     51 |
-| genus            |    442 |
-| strain           |  1,025 |
-| subspecies       |    202 |
-| species group    |     20 |
-| suborder         |      1 |
-| clade            |      6 |
+| order            |      5 |
+| family           |      9 |
+| no rank          |    173 |
+| species          | 42,209 |
+| genus            |    158 |
+| strain           |    407 |
+| subspecies       |    165 |
+| clade            |      4 |
+| species group    |     19 |
 | species subgroup |     10 |
-| varietas         |      1 |
-| isolate          |      1 |
 
 | #tax_id | sci_name                              | rank             |
 | ------: | ------------------------------------- | ---------------- |
@@ -406,3 +403,160 @@ cat Count/genus.before.tsv |
 | Streptomyces      |      816 |    11289 |
 | Streptosporangium |       28 |      110 |
 | Trueperella       |        7 |      142 |
+
+### 3.3 下载并检查
+
+```shell
+cd ~/project/nwr/Actionmycetes
+
+# 生成下载所需文件/脚本
+nwr template summary/Actionmycetes.assembly.tsv \
+    --ass
+
+# 下载
+bash ASSEMBLY/rsync.sh
+# 由于后续antismash需要用到gbff注释文件，将rsync.sh中--exclude="\*\_genomic.gbff.gz"删除掉
+
+# 检查
+bash ASSEMBLY/check.sh
+
+# 对n50等信息进行检查。生成两个文件（n50.tsv and n50.pass.tsv）
+bash ASSEMBLY/n50.sh 50000 500 500000
+# n50.sh需要提前安装hnsm
+
+
+# Actinot_timonense_UMB9819B_GCF_030227995_1没有基因组数据，NCBI上只有report.txt、stats.txt、md5.txt三个文件，无法计算n50，故在n50.tsv中删除这些
+# Kib_sp_MJ126_NF4_GCF_000826545_1
+# Microm_radicis_AZ1_13_GCF_003583405_1
+# Streptos_coryd_CCUG_49571_GCF_042658485_1
+# Streptos_feng_CCUG_58335_GCF_042658525_1
+# Streptos_jiao_CGMCC_4_1884_GCF_042654945_1
+# Streptos_kro_CCUG_49563_GCF_042654805_1
+# Streptos_sheng_CGMCC_1_16303_GCF_042655985_1
+# Streptos_tarax_CGMCC_4_1896_GCF_042663065_1
+
+cat ASSEMBLY/n50.tsv |
+    tsv-filter -H --str-in-fld "name:_GCF_" |
+    tsv-summarize -H --min "N50" --max "C" --min "S"
+# N50_min	C_max	S_min
+# 5021	1959	1335511
+
+# Actinomyces_isr_NCTC12972_GCA_900637225_1同上，无法计算n50
+# Gl_europaea_UMB10119A_GCA_030230005_1
+# Streptomy_sp_Soil_LB_1_GCA_041879315_1
+
+# 然后再手动筛选，生成n50.pass.tsv
+cat ASSEMBLY/n50.tsv |
+    tsv-filter -H --ge "N50:100000" |
+    tsv-filter -H --ge "S:1000000" |
+    tsv-filter -H --le "C:1000" \
+    > ASSEMBLY/n50.pass.tsv
+
+cat ASSEMBLY/n50.tsv |         
+    tsv-summarize -H --quantile "N50:0.1,0.5" --quantile "C:0.5,0.9" --quantile "S:0.1,0.5" |
+    datamash transpose
+# N50_pct10	30608.2
+# N50_pct50	264239
+# C_pct50	76
+# C_pct90	435
+# S_pct10	5847056.8
+# S_pct50	8284047
+
+# collect收集每个sample相关信息。生成collect.tsv
+bash ASSEMBLY/collect.sh
+
+# finish检验筛选并保存。生成
+bash ASSEMBLY/finish.sh
+
+
+cp ASSEMBLY/collect.pass.tsv summary/
+cat ASSEMBLY/counts.tsv |
+    rgr md stdin --fmt
+```
+
+| #item            | fields |  lines |
+| ---------------- | -----: | -----: |
+| url.tsv          |      3 | 16,355 |
+| check.lst        |      1 | 16,355 |
+| collect.tsv      |     20 | 16,356 |
+| n50.tsv          |      4 | 16,344 |
+| n50.pass.tsv     |      4 | 12,532 |
+| collect.pass.tsv |     23 | 12,532 |
+| pass.lst         |      1 | 12,531 |
+| omit.lst         |      1 |    512 |
+| rep.lst          |      1 |  1,601 |
+| sp.lst           |      1 |  5,581 |
+
+ps：
+> `rsync.sh`从NCBI上进行下载数据
+>
+> `check.sh`检查下载情况，对下载的文件进行检验`md5`码
+>
+> `n50.sh`进行n50等组装质量的检验。 后面的三个数字分别是 LEN_N50 表示 N50 值 ， N_CONTIG 表示 contig 的数量 ， LEN_SUM 表示序列总长度，即所有序列长度的总和，just在计算之前作为一个参考
+> 
+> `collect.sh`对每个sample的相关信息进行收集
+>
+> `finish.sh`对下载好的各sample文件的质量的检验和筛选，并生成相关文件来保存这些结果。生成counts.tsv、collect.pass.tsv和4个lst文件，`omit.lst`无蛋白序列/编码区序列、`collect.pss.tsv`筛选colletc.tsv中n50值pass的菌株并给无蛋白序列的菌株注释栏标记为No、`rep.lst`筛选collect.pss.tsv中有refseq的菌株、`sp.lst`筛选collect.pss.tsv中没有species taxon的菌株、`counts.tsv`文件行数（菌株数）计数
+
+
+
+根据Actionmycetes.assembly.tsv，先生成4个tsv，
+complete：Complete Genome、Chromosome
+uncomplete：其他的
+
+taxon：
+untaxon
+
+```shell
+cd ~/project/nwr/Actionmycetes/summary
+
+cat Actionmycetes.assembly.tsv |
+    tsv-filter -H --regex '5:Complete\ Genome|Chromosome' |
+    tsv-filter -H --not-regex '4:sp.' |
+    tsv-select -f 1,4 \
+    > Act_complete_taxon.tsv
+
+cat Actionmycetes.assembly.tsv |
+    tsv-filter -H --regex '5:Complete\ Genome|Chromosome' |
+    tsv-filter -H --regex '4:sp.' |
+    tsv-select -f 1,4 \
+    > Act_complete_untaxon.tsv
+
+cat Actionmycetes.assembly.tsv |
+    tsv-filter -H --not-regex '5:Complete\ Genome|Chromosome' |
+    tsv-filter -H --not-regex '4:sp.' |
+    tsv-select -f 1,4 \
+    > Act_uncomplete_taxon.tsv
+
+cat Actionmycetes.assembly.tsv |
+    tsv-filter -H --not-regex '5:Complete\ Genome|Chromosome' |
+    tsv-filter -H --regex '4:sp.' |
+    tsv-select -f 1,4 \
+    > Act_uncomplete_untaxon.tsv
+
+
+cat collect.pass.tsv |
+    tsv-filter -H --regex '12:Complete\ Genome|Chromosome' |
+    tsv-filter -H --not-regex '2:sp.' |
+    tsv-select -f 1,2 \
+    > Act_pass_complete_taxon.tsv
+
+cat collect.pass.tsv |
+    tsv-filter -H --regex '12:Complete\ Genome|Chromosome' |
+    tsv-filter -H --regex '2:sp.' |
+    tsv-select -f 1,2 \
+    > Act_pass_complete_untaxon.tsv
+
+cat collect.pass.tsv |
+    tsv-filter -H --not-regex '12:Complete\ Genome|Chromosome' |
+    tsv-filter -H --not-regex '2:sp.' |
+    tsv-select -f 1,2 \
+    > Act_pass_uncomplete_taxon.tsv
+
+cat collect.pass.tsv |
+    tsv-filter -H --not-regex '12:Complete\ Genome|Chromosome' |
+    tsv-filter -H --regex '2:sp.' |
+    tsv-select -f 1,2 \
+    > Act_pass_uncomplete_untaxon.tsv
+
+```
